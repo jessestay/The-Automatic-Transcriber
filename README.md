@@ -1,4 +1,4 @@
-# Pyannote Audio Transcription
+# The Automatic Transcriber -- Video and Audio Transcription
 
 A Python script for transcribing audio and video files with speaker diarization using Pyannote Audio and Whisper.
 
