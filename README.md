@@ -21,7 +21,12 @@ HUGGINGFACE_TOKEN=<your_token_here>
 
 ## Usage
 ```bash
-python pyannote.py
+python transcribe.py <input_file> [--model-size <size>] [--use-whisperx]
+
+Arguments:
+  input_file            Audio or video file to transcribe
+  --model-size          Model size (tiny, base, small, medium, large). Default: base
+  --use-whisperx        Use WhisperX instead of Whisper+Pyannote for potentially better results
 ```
 
 ## Output
