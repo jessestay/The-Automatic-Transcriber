@@ -95,7 +95,7 @@ def main():
 
     model_size = args.model
     language = args.language
-    device = args.device
+    device = torch.device(args.device)
 
     if not os.path.exists(wav_file):
         print(f"❌ Error: File '{wav_file}' not found.")
