@@ -11,3 +11,4 @@ python-dotenv
 transformers
 
 git+https://github.com/m-bain/whisperx.git
+pydub

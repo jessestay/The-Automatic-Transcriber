@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import whisperx
 import gc
 import argparse
+from pydub import AudioSegment
 
 def load_config():
     """Load configuration from .env file"""
@@ -98,6 +99,29 @@ def transcribe_with_whisper_pyannote(input_file, model_size, diarization):
     
     return result, diarization
 
+def split_audio(input_file, max_duration=90):  # 90 seconds = 1.5 minutes
+    """Split audio file if longer than max_duration"""
+    audio = AudioSegment.from_file(input_file)
+    duration_ms = len(audio)
+    
+    if duration_ms <= max_duration * 1000:  # Convert seconds to milliseconds
+        return [input_file]
+    
+    # Create temp directory for splits if it doesn't exist
+    temp_dir = "temp_splits"
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    # Split into chunks
+    chunk_files = []
+    for i, start in enumerate(range(0, duration_ms, max_duration * 1000)):
+        end = start + max_duration * 1000
+        chunk = audio[start:min(end, duration_ms)]
+        chunk_path = os.path.join(temp_dir, f"chunk_{i}.wav")
+        chunk.export(chunk_path, format="wav")
+        chunk_files.append(chunk_path)
+    
+    return chunk_files
+
 def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Transcribe audio with speaker diarization')
@@ -119,46 +143,35 @@ def main():
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if not args.use_whisperx:
-        # Original Whisper + Pyannote pipeline
-        print("🎙️ Running speaker diarization with Pyannote...")
-        pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization",
-            use_auth_token=HUGGINGFACE_TOKEN
-        )
-        pipeline = pipeline.to(device)
-        diarization = pipeline(input_file, min_speakers=2, max_speakers=3)
-        
-        result, diarization = transcribe_with_whisper_pyannote(input_file, args.model_size, diarization)
-        
-        # Write results
-        output_file = os.path.splitext(input_file)[0] + "_transcript.txt"
-        with open(output_file, "w", encoding="utf-8") as f:
-            for segment in result['segments']:
-                start_time = segment['start']
-                end_time = segment['end']
-                speaker = get_speaker_at_time(start_time, diarization)
-                timestamp = f"[{start_time:.1f}s - {end_time:.1f}s]"
-                text = segment['text'].strip()
-                line = f"{timestamp} {speaker}: {text}"
-                print(line)
-                f.write(line + "\n")
-    else:
-        # WhisperX pipeline
-        result = transcribe_with_whisperx(input_file, args.model_size, HUGGINGFACE_TOKEN, device)
-        
-        # Write results
-        output_file = os.path.splitext(input_file)[0] + "_transcript.txt"
-        with open(output_file, "w", encoding="utf-8") as f:
-            for segment in result["segments"]:
-                start_time = segment['start']
-                end_time = segment['end']
-                speaker = segment.get('speaker', 'UNKNOWN')
-                timestamp = f"[{start_time:.1f}s - {end_time:.1f}s]"
-                text = segment['text'].strip()
-                line = f"{timestamp} {speaker}: {text}"
-                print(line)
-                f.write(line + "\n")
+    # Split file if needed
+    chunk_files = split_audio(input_file)
+    
+    all_results = []
+    for chunk_file in chunk_files:
+        if args.use_whisperx:
+            result = transcribe_with_whisperx(chunk_file, args.model_size, HUGGINGFACE_TOKEN, device)
+        else:
+            result = transcribe_with_whisper(chunk_file, args.model_size, HUGGINGFACE_TOKEN)
+        all_results.extend(result)
+    
+    # Clean up temp files if they were created
+    if len(chunk_files) > 1:
+        for chunk_file in chunk_files:
+            os.remove(chunk_file)
+        os.rmdir("temp_splits")
+    
+    # Write results
+    output_file = os.path.splitext(input_file)[0] + "_transcript.txt"
+    with open(output_file, "w", encoding="utf-8") as f:
+        for segment in all_results:
+            start_time = segment['start']
+            end_time = segment['end']
+            speaker = segment.get('speaker', 'UNKNOWN')
+            timestamp = f"[{start_time:.1f}s - {end_time:.1f}s]"
+            text = segment['text'].strip()
+            line = f"{timestamp} {speaker}: {text}"
+            print(line)
+            f.write(line + "\n")
 
     print(f"✅ Transcription with speaker diarization complete! Saved to {output_file}")
 
