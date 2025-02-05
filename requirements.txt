@@ -1,6 +1,14 @@
---find-links https://download.pytorch.org/whl/cu102/torch_stable.html
-torch==1.10.0+cu102
-torchaudio==0.10.0
+# For WhisperX compatibility:
+torch==1.10.0
 pyannote.audio==0.0.1
+
+# For general use:
+whisperx
 whisper-timestamped
+python-dotenv
 ffmpeg-python
+
+# Note: If not using --use-whisperx flag, you can use newer versions of torch and pyannote.audio
+
+--find-links https://download.pytorch.org/whl/cu102/torch_stable.html
+git+https://github.com/m-bain/whisperx.git

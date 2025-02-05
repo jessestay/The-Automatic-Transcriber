@@ -38,3 +38,10 @@ The script will output a timestamped transcript with speaker labels for each aud
 - The script will use the `openai/whisper-large-v3` model for transcription
 - The script will output a timestamped transcript with speaker labels for each audio file in the `output` directory
 
+## TODO
+- Add a way to specify the model size
+- Add a way to specify the output directory
+- Add a way to specify the input file
+- Add a way to specify the output file
+- Add a way to specify the output format
+- Add a way to specify the output file     

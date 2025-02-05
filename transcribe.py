@@ -64,16 +64,19 @@ def transcribe_with_whisperx(input_file, model_size, HUGGINGFACE_TOKEN, device):
     """Transcribe using WhisperX"""
     print(f"🚀 Running WhisperX transcription using {model_size} model...")
     
-    # 1. Transcribe with original whisper
-    model = whisperx.load_model(model_size, device)
+    # Convert device to string if it's a torch.device object
+    device_str = device.type if hasattr(device, 'type') else str(device)
+    
+    # Add compute_type='float32' for CPU compatibility
+    model = whisperx.load_model(model_size, device_str, compute_type="float32")
     result = model.transcribe(input_file, language="en", batch_size=16)
     
     # 2. Load alignment model and align
-    model_a, metadata = whisperx.load_align_model(language_code="en", device=device)
-    result = whisperx.align(result["segments"], model_a, metadata, input_file, device)
+    model_a, metadata = whisperx.load_align_model(language_code="en", device=device_str)
+    result = whisperx.align(result["segments"], model_a, metadata, input_file, device_str)
     
     # 3. Assign speaker labels
-    diarize_model = whisperx.DiarizationPipeline(use_auth_token=HUGGINGFACE_TOKEN, device=device)
+    diarize_model = whisperx.DiarizationPipeline(use_auth_token=HUGGINGFACE_TOKEN, device=device_str)
     diarize_segments = diarize_model(input_file)
     result = whisperx.assign_word_speakers(diarize_segments, result)
     
@@ -161,3 +164,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
