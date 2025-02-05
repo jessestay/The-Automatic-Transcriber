@@ -56,13 +56,15 @@ def convert_to_wav(input_file):
     print(f"🔄 Converting {input_file} to {output_file}...")
     
     ffmpeg_path = get_ffmpeg_path()
-    command = [ffmpeg_path, '-i', input_file, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', output_file]
+    command = [ffmpeg_path, '-i', input_file, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', output_file, '-y']
     
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
         print("Error converting file:")
-        print(result.stderr.decode())
+        print(result.stderr)
         sys.exit(1)
+        
+    print("✅ Conversion complete!")
     return output_file
 
 def is_video_file(filename):
@@ -85,23 +87,21 @@ def main():
     
     args = parser.parse_args()
     
+    # Convert input file to wav
+    wav_file = convert_to_wav(args.input_file)
+    
     # Load token from config
     HUGGINGFACE_TOKEN = load_config()
 
-    input_file = args.input_file
     model_size = args.model
     language = args.language
     device = args.device
 
-    if not os.path.exists(input_file):
-        print(f"❌ Error: File '{input_file}' not found.")
+    if not os.path.exists(wav_file):
+        print(f"❌ Error: File '{wav_file}' not found.")
         sys.exit(1)
 
-    # Convert video files to audio
-    if is_video_file(input_file):
-        input_file = convert_to_wav(input_file)
-
-    print("🎙️ Running speaker diarization...")
+    print("\n🎙️ Running speaker diarization...")
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization",
         use_auth_token=HUGGINGFACE_TOKEN
@@ -111,20 +111,20 @@ def main():
     pipeline = pipeline.to(device)
     
     # Add parameters to improve diarization
-    diarization = pipeline(input_file, 
+    diarization = pipeline(wav_file, 
                           min_speakers=2,          # Minimum number of speakers
                           max_speakers=3)          # Maximum number of speakers
 
     print(f"🚀 Running transcription using {model_size} model...")
     model = load_model(model_size)
     # Add language and initial prompt to improve transcription
-    result = transcribe(model, input_file, 
+    result = transcribe(model, wav_file, 
                        language=language,     # Specify language if known
                        condition_on_previous_text=True,  # Use context from previous segments
                        beam_size=5)       # Increase beam size for better accuracy
 
     # Create output filename
-    output_file = os.path.splitext(input_file)[0] + "_transcript.txt"
+    output_file = os.path.splitext(wav_file)[0] + "_transcript.txt"
 
     # Write results to file and print to console
     with open(output_file, "w", encoding="utf-8") as f:
