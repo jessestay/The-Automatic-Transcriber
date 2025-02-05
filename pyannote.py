@@ -6,6 +6,9 @@ from whisper_timestamped import load_model, transcribe
 from pyannote.audio import Pipeline
 from datetime import timedelta
 from dotenv import load_dotenv
+import shutil
+import platform
+import argparse
 
 def load_config():
     """Load configuration from .env file"""
@@ -22,28 +25,44 @@ def load_config():
     
     return token
 
-def convert_to_wav(input_file):
-    output_file = os.path.splitext(input_file)[0] + ".wav"
+def get_ffmpeg_path():
+    # First try to find ffmpeg in PATH
+    ffmpeg = shutil.which('ffmpeg')
+    if ffmpeg:
+        return ffmpeg
+        
+    # If not in PATH, check common locations based on OS
+    if platform.system() == 'Windows':
+        common_locations = [
+            r"C:\ProgramData\chocolatey\bin\ffmpeg.exe",
+            r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
+            r"C:\ffmpeg\bin\ffmpeg.exe"
+        ]
+    else:  # Linux/Mac
+        common_locations = [
+            "/usr/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/opt/homebrew/bin/ffmpeg"
+        ]
     
+    for location in common_locations:
+        if os.path.isfile(location):
+            return location
+            
+    raise FileNotFoundError("FFmpeg not found. Please install FFmpeg and make sure it's in your PATH.")
+
+def convert_to_wav(input_file):
+    output_file = os.path.splitext(input_file)[0] + '.wav'
     print(f"🔄 Converting {input_file} to {output_file}...")
     
-    command = [
-        "ffmpeg", "-i", input_file,
-        "-ac", "1",                # Mono audio
-        "-ar", "16000",            # 16kHz sampling rate
-        "-af", "highpass=f=200,lowpass=f=3000",  # Filter out noise
-        "-filter:a", "volume=1.5",  # Increase volume if audio is too quiet
-        output_file,
-        "-y"
-    ]
+    ffmpeg_path = get_ffmpeg_path()
+    command = [ffmpeg_path, '-i', input_file, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', output_file]
     
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    
     if result.returncode != 0:
-        print("❌ Error converting file:", result.stderr.decode())
+        print("Error converting file:")
+        print(result.stderr.decode())
         sys.exit(1)
-    
-    print("✅ Conversion complete!")
     return output_file
 
 def is_video_file(filename):
@@ -58,16 +77,21 @@ def get_speaker_at_time(time, diarization):
     return "Unknown Speaker"
 
 def main():
-    if len(sys.argv) < 2:
-        print("❌ Error: Please provide a filename as an argument.")
-        print("Usage: python transcribe.py <filename> [model_size]")
-        sys.exit(1)
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input_file", help="Path to the input video/audio file")
+    parser.add_argument("--model", default="large-v2", help="Whisper model size (tiny, base, small, medium, large-v2)")
+    parser.add_argument("--language", default="en", help="Language code (en, fr, etc.)")
+    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu", help="Device to use (cuda/cpu)")
+    
+    args = parser.parse_args()
+    
     # Load token from config
     HUGGINGFACE_TOKEN = load_config()
 
-    input_file = sys.argv[1]
-    model_size = sys.argv[2] if len(sys.argv) > 2 else "base"
+    input_file = args.input_file
+    model_size = args.model
+    language = args.language
+    device = args.device
 
     if not os.path.exists(input_file):
         print(f"❌ Error: File '{input_file}' not found.")
@@ -84,7 +108,6 @@ def main():
     )
     
     # Move to CPU or GPU after loading
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pipeline = pipeline.to(device)
     
     # Add parameters to improve diarization
@@ -96,7 +119,7 @@ def main():
     model = load_model(model_size)
     # Add language and initial prompt to improve transcription
     result = transcribe(model, input_file, 
-                       language="en",     # Specify language if known
+                       language=language,     # Specify language if known
                        condition_on_previous_text=True,  # Use context from previous segments
                        beam_size=5)       # Increase beam size for better accuracy
 
