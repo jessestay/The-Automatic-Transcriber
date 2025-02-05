@@ -10,6 +10,7 @@ import whisperx
 import gc
 import argparse
 from pydub import AudioSegment
+import whisper
 
 def load_config():
     """Load configuration from .env file"""
@@ -121,6 +122,41 @@ def split_audio(input_file, max_duration=90):  # 90 seconds = 1.5 minutes
         chunk_files.append(chunk_path)
     
     return chunk_files
+
+def transcribe_with_whisper(input_file, model_size, hf_token):
+    """Transcribe using regular Whisper"""
+    print(f"🚀 Running Whisper transcription using {model_size} model...")
+    
+    # Load the pipeline
+    pipeline = Pipeline.from_pretrained(
+        "pyannote/speaker-diarization",
+        use_auth_token=hf_token
+    )
+    
+    # Load Whisper model
+    model = whisper.load_model(model_size)
+    
+    # Transcribe
+    result = model.transcribe(input_file)
+    
+    # Get diarization
+    diarization = pipeline(input_file)
+    
+    # Process and combine results
+    segments = []
+    for segment, track, speaker in diarization.itertracks(yield_label=True):
+        text_segments = [s for s in result["segments"] 
+                        if segment.start <= s["start"] < segment.end]
+        
+        for seg in text_segments:
+            segments.append({
+                "start": seg["start"],
+                "end": seg["end"],
+                "speaker": speaker,
+                "text": seg["text"]
+            })
+    
+    return segments
 
 def main():
     # Set up argument parser
