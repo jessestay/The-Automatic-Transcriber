@@ -84,6 +84,7 @@ def main():
     parser.add_argument("--model", default="large-v2", help="Whisper model size (tiny, base, small, medium, large-v2)")
     parser.add_argument("--language", default="en", help="Language code (en, fr, etc.)")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu", help="Device to use (cuda/cpu)")
+    parser.add_argument("--use_whisperx", action="store_true", help="Use WhisperX instead of regular Whisper")
     
     args = parser.parse_args()
     
